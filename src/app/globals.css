@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-base-void text-ink-primary antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+  ::selection {
+    @apply bg-accent-blue/30 text-white;
+  }
+  /* Thin, quiet scrollbars — this is a data-dense product, scrollbars should not compete for attention */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-base-borderLight rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-ink-tertiary;
+  }
+  :focus-visible {
+    outline: 2px solid theme("colors.accent.blue");
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+@layer components {
+  /* The single signature surface treatment used everywhere — glass card */
+  .glass-card {
+    @apply relative rounded-2xl border border-base-border bg-base-surface/80 backdrop-blur-xl shadow-card;
+  }
+  .glass-card-hover {
+    @apply transition-all duration-200 hover:border-base-borderLight hover:bg-base-raised/80;
+  }
+  .stat-value {
+    @apply font-mono text-2xl font-semibold tracking-tight text-ink-primary;
+  }
+  .label-eyebrow {
+    @apply text-[11px] font-medium uppercase tracking-[0.14em] text-ink-tertiary;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

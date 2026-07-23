@@ -1,0 +1,433 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ================= AUTH & USERS =================
+
+enum Role {
+  USER
+  PREMIUM
+  MODERATOR
+  ADMIN
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+}
+
+model User {
+  id             String    @id @default(cuid())
+  name           String?
+  email          String    @unique
+  emailVerified  DateTime?
+  password       String?
+  image          String?
+  role           Role      @default(USER)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  accounts       Account[]
+  sessions       Session[]
+  subscription   Subscription?
+  journalEntries JournalEntry[]
+  researchPages  ResearchPage[]
+  bookmarks      Bookmark[]
+  progress       LessonProgress[]
+  comments       Comment[]
+  notifications  Notification[]
+  auditLogs      AuditLog[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ================= BILLING =================
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  userId               String             @unique
+  user                 User               @relation(fields: [userId], references: [id])
+  stripeCustomerId     String             @unique
+  stripeSubscriptionId String?            @unique
+  stripePriceId        String?
+  status               SubscriptionStatus @default(INCOMPLETE)
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+}
+
+// ================= CONTENT / KNOWLEDGE BASE =================
+
+enum ContentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum DifficultyLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+model Category {
+  id       String    @id @default(cuid())
+  name     String
+  slug     String    @unique
+  order    Int       @default(0)
+  articles Article[]
+  lessons  Lesson[]
+}
+
+model Tag {
+  id       String         @id @default(cuid())
+  name     String         @unique
+  articles Article[]      @relation("ArticleTags")
+  lessons  Lesson[]       @relation("LessonTags")
+  research ResearchPage[] @relation("ResearchTags")
+}
+
+model Article {
+  id              String           @id @default(cuid())
+  title           String
+  slug            String           @unique
+  content         Json
+  summary         String?
+  difficulty      DifficultyLevel  @default(BEGINNER)
+  status          ContentStatus    @default(DRAFT)
+  categoryId      String?
+  category        Category?        @relation(fields: [categoryId], references: [id])
+  tags            Tag[]            @relation("ArticleTags")
+  relatedArticles Article[]        @relation("RelatedArticles")
+  relatedFrom     Article[]        @relation("RelatedArticles")
+  jemRefs         Jem[]            @relation("ArticleJems")
+  bookmarks       Bookmark[]
+  comments        Comment[]
+  versions        ContentVersion[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+model Jem {
+  id        String    @id @default(cuid())
+  number    Int       @unique
+  title     String
+  content   Json
+  articles  Article[] @relation("ArticleJems")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model ContentVersion {
+  id        String   @id @default(cuid())
+  articleId String
+  article   Article  @relation(fields: [articleId], references: [id])
+  content   Json
+  editedBy  String
+  createdAt DateTime @default(now())
+}
+
+// ================= LEARNING SYSTEM =================
+
+model Course {
+  id          String        @id @default(cuid())
+  title       String
+  slug        String        @unique
+  description String?
+  order       Int           @default(0)
+  modules     Module[]
+  status      ContentStatus @default(DRAFT)
+}
+
+model Module {
+  id       String   @id @default(cuid())
+  courseId String
+  course   Course   @relation(fields: [courseId], references: [id])
+  title    String
+  order    Int      @default(0)
+  lessons  Lesson[]
+}
+
+model Lesson {
+  id         String           @id @default(cuid())
+  moduleId   String
+  module     Module           @relation(fields: [moduleId], references: [id])
+  title      String
+  slug       String           @unique
+  content    Json
+  videoUrl   String?
+  categoryId String?
+  category   Category?        @relation(fields: [categoryId], references: [id])
+  tags       Tag[]            @relation("LessonTags")
+  difficulty DifficultyLevel  @default(BEGINNER)
+  order      Int              @default(0)
+  status     ContentStatus    @default(DRAFT)
+  progress   LessonProgress[]
+  quizzes    Quiz[]
+}
+
+model LessonProgress {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  lessonId    String
+  lesson      Lesson    @relation(fields: [lessonId], references: [id])
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+
+  @@unique([userId, lessonId])
+}
+
+model Quiz {
+  id       String @id @default(cuid())
+  lessonId String
+  lesson   Lesson @relation(fields: [lessonId], references: [id])
+  question String
+  options  Json
+  answer   Int
+}
+
+// ================= RESEARCH =================
+
+enum PageType {
+  DOC
+  KANBAN
+  TIMELINE
+  CALENDAR
+  GALLERY
+}
+
+model ResearchPage {
+  id        String          @id @default(cuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id])
+  parentId  String?
+  parent    ResearchPage?   @relation("PageTree", fields: [parentId], references: [id])
+  children  ResearchPage[]  @relation("PageTree")
+  title     String
+  icon      String?
+  type      PageType        @default(DOC)
+  position  Int             @default(0)
+  isPublic  Boolean         @default(false)
+  blocks    ResearchBlock[]
+  tags      Tag[]           @relation("ResearchTags")
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+}
+
+model ResearchBlock {
+  id            String       @id @default(cuid())
+  pageId        String
+  page          ResearchPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  type          String // "text" | "heading" | "todo" | "kanban_card" | "image" | "embed"
+  content       Json // { title, tag, tagTone, ...freeform }
+  column        String? // kanban column key, e.g. "todo" | "in_progress" | "done" — null for non-kanban blocks
+  position      Int
+  parentBlockId String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+// ================= JOURNAL =================
+
+enum TradeDirection {
+  LONG
+  SHORT
+}
+
+enum TradeResult {
+  WIN
+  LOSS
+  BREAKEVEN
+  OPEN
+}
+
+model TradingAccount {
+  id      String         @id @default(cuid())
+  userId  String
+  name    String
+  broker  String?
+  entries JournalEntry[]
+}
+
+model JournalEntry {
+  id              String          @id @default(cuid())
+  userId          String
+  user            User            @relation(fields: [userId], references: [id])
+  accountId       String?
+  account         TradingAccount? @relation(fields: [accountId], references: [id])
+  date            DateTime
+  instrument      String
+  direction       TradeDirection
+  entry           Float
+  stop            Float
+  target          Float?
+  riskAmount      Float?
+  rewardAmount    Float?
+  result          TradeResult     @default(OPEN)
+  rMultiple       Float?
+  narrative       String?
+  quarterCycle    String?
+  ssmtPresent     Boolean         @default(false)
+  tpdPresent      Boolean         @default(false)
+  pspPresent      Boolean         @default(false)
+  trueOpenSide    String?
+  htfContext      String?
+  ltfContext      String?
+  checklist       Json?
+  psychology      String?
+  mistakes        String?
+  lessons         String?
+  screenshots     String[]
+  tradingViewLink String?
+  aiSummary       String?
+  session         String?
+  killZone        String?
+  confidence      Int?
+  disciplineScore Int?
+  emotion         String?
+  commission      Float?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+// ================= BACKTESTING =================
+
+model BacktestSession {
+  id         String          @id @default(cuid())
+  userId     String
+  title      String
+  instrument String
+  dateRange  Json
+  notes      Json?
+  entries    BacktestEntry[]
+  winRate    Float?
+  avgRR      Float?
+  createdAt  DateTime        @default(now())
+}
+
+model BacktestEntry {
+  id          String          @id @default(cuid())
+  sessionId   String
+  session     BacktestSession @relation(fields: [sessionId], references: [id])
+  entryPrice  Float
+  stopPrice   Float
+  targetPrice Float?
+  result      TradeResult     @default(OPEN)
+  rMultiple   Float?
+  screenshot  String?
+  notes       String?
+}
+
+// ================= ECONOMIC CALENDAR =================
+
+model EconomicEvent {
+  id        String   @id @default(cuid())
+  title     String
+  country   String
+  impact    Int
+  eventTime DateTime
+  actual    String?
+  forecast  String?
+  previous  String?
+  notes     String?
+}
+
+// ================= COMMUNITY & SOCIAL =================
+
+model Bookmark {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  articleId String?
+  article   Article? @relation(fields: [articleId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  articleId String?
+  article   Article? @relation(fields: [articleId], references: [id])
+  content   String
+  parentId  String?
+  createdAt DateTime @default(now())
+}
+
+model Announcement {
+  id        String   @id @default(cuid())
+  title     String
+  body      Json
+  pinned    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String
+  payload   Json
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+// ================= ADMIN / OPS =================
+
+model FeatureFlag {
+  id      String  @id @default(cuid())
+  key     String  @unique
+  enabled Boolean @default(false)
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  action    String
+  entity    String
+  entityId  String
+  metadata  Json?
+  createdAt DateTime @default(now())
+}
